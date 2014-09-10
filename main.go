@@ -24,83 +24,94 @@ func main() {
 
 	fmt.Println("Repos that contain magento and PHP code.")
 
-	page := 1
-	maxPage := math.MaxInt32
-
-	query := fmt.Sprintf("magento+language:php+page:10")
-
-	opts := &github.SearchOptions{
-		Sort:  "updated",
-		Order: "desc",
-		ListOptions: github.ListOptions{
-			PerPage: 100,
-		},
-	}
-
-	filename := "/tmp/repos_locations"
+	// create a file to be used for geocoder
+	filename := "/tmp/locations.txt"
 
 	f, err := os.Create(filename)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	for page <= maxPage {
-		opts.Page = page
-		result, response, err := client.Search.Repositories(query, opts)
-		Wait(response)
+	// slice the queries into batches to get around the API limit of 1000
 
-		if err != nil {
-			log.Fatal("FindRepos:", err)
+	queries := []string{"\"2008-06-01 .. 2012-09-01\"", "\"2008-06-01 .. 2012-09-01\"", "\"2012-09-02 .. 2013-04-20\"", "\"2013-04-21 .. 2013-10-20\"", "\"2013-10-21 .. 2014-03-10\"", "\"2014-03-10 .. 2014-07-10\"", "\"2014-07-10 .. 2014-09-30\""}
+
+	for _, q := range queries {
+
+		query := fmt.Sprintf("magento language:PHP created:" + q)
+
+		page := 1
+		maxPage := math.MaxInt32
+
+		opts := &github.SearchOptions{
+			Sort:  "updated",
+			Order: "desc",
+			ListOptions: github.ListOptions{
+				PerPage: 100,
+			},
 		}
 
-		maxPage = response.LastPage
-
-		msg := fmt.Sprintf("page: %v/%v, size: %v, total: %v",
-			page, maxPage, len(result.Repositories), *result.Total)
-		log.Println(msg)
-
-		for _, repo := range result.Repositories {
-
-			repo_name := *repo.FullName
-			username := *repo.Owner.Login
-
-			fmt.Println("repo: ", repo_name)
-			fmt.Println("owner: ", username)
-
-			user, response, err := client.Users.Get(username)
+		for page <= maxPage {
+			opts.Page = page
+			result, response, err := client.Search.Repositories(query, opts)
 			Wait(response)
 
 			if err != nil {
-				fmt.Println(err)
-			} else {
+				log.Fatal("FindRepos:", err)
+			}
 
-				if user.Location != nil {
+			maxPage = response.LastPage
 
-					user_location := *user.Location
+			msg := fmt.Sprintf("page: %v/%v, size: %v, total: %v",
+				page, maxPage, len(result.Repositories), *result.Total)
+			log.Println(msg)
 
-					n, err := io.WriteString(f, "\""+username+"\",\""+user_location+"\",\""+repo_name+"\"\n")
-					if err != nil {
-						fmt.Println(n, err)
-					}
+			for _, repo := range result.Repositories {
 
+				repo_name := *repo.FullName
+				username := *repo.Owner.Login
+				created_at := repo.CreatedAt.String()
+
+				fmt.Println("repo: ", repo_name)
+				fmt.Println("owner: ", username)
+				fmt.Println("created_at: ", created_at)
+
+				user, response, err := client.Users.Get(username)
+				Wait(response)
+
+				if err != nil {
+					fmt.Println(err)
 				} else {
 
-					user_location := "not found"
+					if user.Location != nil {
 
-					n, err := io.WriteString(f, "\""+username+"\",\""+user_location+"\",\""+repo_name+"\"\n")
-					if err != nil {
-						fmt.Println(n, err)
+						user_location := *user.Location
+
+						n, err := io.WriteString(f, "\""+username+"\",\""+user_location+"\",\""+repo_name+"\",\""+created_at+"\"\n")
+						if err != nil {
+							fmt.Println(n, err)
+						}
+
+					} else {
+
+						user_location := "not found"
+
+						n, err := io.WriteString(f, "\""+username+"\",\""+user_location+"\",\""+repo_name+"\",\""+created_at+"\"\n")
+						if err != nil {
+							fmt.Println(n, err)
+						}
+
 					}
 
 				}
 
+				time.Sleep(time.Millisecond * 500)
+
 			}
 
-			time.Sleep(time.Millisecond * 2500)
+			page++
 
 		}
-
-		page++
 
 	}
 
