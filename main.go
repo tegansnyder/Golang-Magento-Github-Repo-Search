@@ -17,8 +17,8 @@ const (
 func main() {
 
 	t := &github.UnauthenticatedRateLimitedTransport{
-		ClientID:     "a4157b9e1e84e52658c9",
-		ClientSecret: "0f7c2313ced247debae6009605380a95ee73ff6c",
+		ClientID:     "SOME_CLIENT_ID",
+		ClientSecret: "SOME_CLIENT_SECRET",
 	}
 	client := github.NewClient(t.Client())
 
