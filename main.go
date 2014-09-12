@@ -10,9 +10,7 @@ import (
 	"time"
 )
 
-const (
-	REMAINING_THRESHOLD = 1
-)
+const remaingThreshold = 1
 
 func main() {
 
@@ -30,11 +28,20 @@ func main() {
 	f, err := os.Create(filename)
 	if err != nil {
 		fmt.Println(err)
+		//this is a fatal error, quit
+		return
 	}
+	defer f.Close()
 
 	// slice the queries into batches to get around the API limit of 1000
 
-	queries := []string{"\"2008-06-01 .. 2012-09-01\"", "\"2008-06-01 .. 2012-09-01\"", "\"2012-09-02 .. 2013-04-20\"", "\"2013-04-21 .. 2013-10-20\"", "\"2013-10-21 .. 2014-03-10\"", "\"2014-03-10 .. 2014-07-10\"", "\"2014-07-10 .. 2014-09-30\""}
+	queries := []string{"\"2008-06-01 .. 2012-09-01\"",
+		"\"2008-06-01 .. 2012-09-01\"",
+		"\"2012-09-02 .. 2013-04-20\"",
+		"\"2013-04-21 .. 2013-10-20\"",
+		"\"2013-10-21 .. 2014-03-10\"",
+		"\"2014-03-10 .. 2014-07-10\"",
+		"\"2014-07-10 .. 2014-09-30\""}
 
 	for _, q := range queries {
 
@@ -51,13 +58,14 @@ func main() {
 			},
 		}
 
-		for page <= maxPage {
+		for ; page <= maxPage; page++ {
 			opts.Page = page
 			result, response, err := client.Search.Repositories(query, opts)
-			Wait(response)
+			wait(response)
 
 			if err != nil {
 				log.Fatal("FindRepos:", err)
+				break
 			}
 
 			maxPage = response.LastPage
@@ -68,59 +76,43 @@ func main() {
 
 			for _, repo := range result.Repositories {
 
-				repo_name := *repo.FullName
+				repoName := *repo.FullName
 				username := *repo.Owner.Login
-				created_at := repo.CreatedAt.String()
+				createdAt := repo.CreatedAt.String()
 
-				fmt.Println("repo: ", repo_name)
+				fmt.Println("repo: ", repoName)
 				fmt.Println("owner: ", username)
-				fmt.Println("created_at: ", created_at)
+				fmt.Println("created at: ", createdAt)
 
 				user, response, err := client.Users.Get(username)
-				Wait(response)
+				wait(response)
 
 				if err != nil {
-					fmt.Println(err)
+					fmt.Println("error getting userinfo for:", username, err)
+					continue
+				}
+
+				userLocation := ""
+				if user.Location == nil {
+					userLocation = "not found"
 				} else {
+					userLocation = *user.Location
+				}
 
-					if user.Location != nil {
-
-						user_location := *user.Location
-
-						n, err := io.WriteString(f, "\""+username+"\",\""+user_location+"\",\""+repo_name+"\",\""+created_at+"\"\n")
-						if err != nil {
-							fmt.Println(n, err)
-						}
-
-					} else {
-
-						user_location := "not found"
-
-						n, err := io.WriteString(f, "\""+username+"\",\""+user_location+"\",\""+repo_name+"\",\""+created_at+"\"\n")
-						if err != nil {
-							fmt.Println(n, err)
-						}
-
-					}
-
+				n, err := io.WriteString(f, "\""+username+"\",\""+userLocation+"\",\""+repoName+"\",\""+createdAt+"\"\n")
+				if err != nil {
+					fmt.Println(n, err)
 				}
 
 				time.Sleep(time.Millisecond * 500)
-
 			}
-
-			page++
-
 		}
-
 	}
-
-	f.Close()
 
 }
 
-func Wait(response *github.Response) {
-	if response != nil && response.Remaining <= REMAINING_THRESHOLD {
+func wait(response *github.Response) {
+	if response != nil && response.Remaining <= remaingThreshold {
 		gap := time.Duration(response.Reset.Local().Unix() - time.Now().Unix())
 		sleep := gap * time.Second
 		if sleep < 0 {
